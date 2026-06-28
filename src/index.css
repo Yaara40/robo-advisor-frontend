@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-base: #0d1117;
+  --color-surface: #161b22;
+  --color-elevated: #1a2332;
+  --color-border: #21262d;
+  --color-accent: #00d395;
+  --color-accent-dim: rgba(0, 211, 149, 0.12);
+  --color-text-primary: #e6edf3;
+  --color-text-muted: #8b949e;
+
+  /* per-coin accent colors */
+  --color-coin-btc: #f7931a;
+  --color-coin-eth: #8b5cf6;
+  --color-coin-sol: #00ffa3;
+  --color-coin-xrp: #9ca3af;
+  --color-coin-bnb: #f3ba2f;
+  --color-coin-doge: #c2a633;
+  --color-coin-hype: #ef4444;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #0d1117;
+  color: #e6edf3;
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #161b22;
+}
+::-webkit-scrollbar-thumb {
+  background: #21262d;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #30363d;
+}
+
+/* Range slider styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #21262d;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00d395;
+  cursor: pointer;
+  border: 2px solid #0d1117;
+  box-shadow: 0 0 0 3px rgba(0, 211, 149, 0.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00d395;
+  cursor: pointer;
+  border: 2px solid #0d1117;
+  box-shadow: 0 0 0 3px rgba(0, 211, 149, 0.2);
+}
