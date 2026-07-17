@@ -54,6 +54,7 @@ export interface OptimizeResponse {
   risk_level: number;
   amount: number;
   allocations: Record<string, CoinAllocation>;
+  report?: string;
 }
 
 export interface DashboardResponse {

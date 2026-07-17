@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "../api/client";
 import type { MarketPrediction } from "../types";
 import { CoinBadge } from "../components/shared/CoinBadge";
@@ -20,6 +20,8 @@ const TIMEFRAME_MAP: Record<string, string> = {
   Weekly: "weekly",
 };
 
+const POLL_INTERVAL = 30_000; // 30 seconds
+
 const COL_STYLE: React.CSSProperties = {
   color: "#8b949e",
   fontSize: 11,
@@ -35,20 +37,78 @@ const COL_STYLE: React.CSSProperties = {
 
 export function MarketsPage() {
   const [data, setData] = useState<MarketPrediction[]>([]);
+  const [prevPrices, setPrevPrices] = useState<Record<string, number>>({});
+  const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedCoin, setSelectedCoin] = useState("All");
   const [selectedTimeframe, setSelectedTimeframe] = useState("All");
   const [sortKey, setSortKey] = useState<SortKey>("edge");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [secondsAgo, setSecondsAgo] = useState(0);
 
-  useEffect(() => {
-    api
-      .markets()
-      .then((r) => setData(r.markets))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+  const prevPricesRef = useRef<Record<string, number>>({});
+
+  const fetchMarkets = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    try {
+      // Force-bypass the server-side cache on manual refresh
+      if (isManual) {
+        await fetch("/api/refresh").catch(() => {});
+      }
+      const r = await api.markets();
+      const incoming = r.markets;
+
+      // Detect which market prices changed since last fetch
+      const prev = prevPricesRef.current;
+      const changed = new Set<string>();
+      incoming.forEach((m) => {
+        if (prev[m.id] !== undefined && prev[m.id] !== m.market_price) {
+          changed.add(m.id);
+        }
+      });
+
+      // Store new prices for next comparison
+      const newPrices: Record<string, number> = {};
+      incoming.forEach((m) => { newPrices[m.id] = m.market_price; });
+      prevPricesRef.current = newPrices;
+      setPrevPrices(newPrices);
+
+      setData(incoming);
+      setChangedIds(changed);
+      setLastUpdated(new Date());
+      setError(null);
+
+      // Clear highlight after 2s
+      if (changed.size > 0) {
+        setTimeout(() => setChangedIds(new Set()), 2000);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  // Initial fetch + polling
+  useEffect(() => {
+    fetchMarkets();
+    const interval = setInterval(() => fetchMarkets(), POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchMarkets]);
+
+  // "X seconds ago" counter
+  useEffect(() => {
+    const tick = setInterval(() => {
+      if (lastUpdated) {
+        setSecondsAgo(Math.round((Date.now() - lastUpdated.getTime()) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [lastUpdated]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -59,17 +119,12 @@ export function MarketsPage() {
     }
   };
 
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return " ↕";
-    return sortDir === "desc" ? " ↓" : " ↑";
-  };
+  const sortIndicator = (key: SortKey) =>
+    sortKey !== key ? " ↕" : sortDir === "desc" ? " ↓" : " ↑";
 
   const filtered = data
     .filter((m) => selectedCoin === "All" || m.coin === selectedCoin)
-    .filter((m) => {
-      if (selectedTimeframe === "All") return true;
-      return m.market_type === TIMEFRAME_MAP[selectedTimeframe];
-    })
+    .filter((m) => selectedTimeframe === "All" || m.market_type === TIMEFRAME_MAP[selectedTimeframe])
     .sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       return (a[sortKey] - b[sortKey]) * mul;
@@ -77,20 +132,77 @@ export function MarketsPage() {
 
   const maxEdge = Math.max(...data.map((m) => Math.abs(m.edge)), 0.01);
 
-  if (loading) return <LoadingSpinner message="Loading markets..." />;
-  if (error) return <ErrorMessage message={`Failed to load markets: ${error}`} />;
+  const formatLastUpdated = () => {
+    if (!lastUpdated) return "";
+    if (secondsAgo < 5) return "just now";
+    if (secondsAgo < 60) return `${secondsAgo}s ago`;
+    return `${Math.floor(secondsAgo / 60)}m ago`;
+  };
+
+  if (loading) return <LoadingSpinner message="Fetching live markets from Polymarket..." />;
+  if (error && data.length === 0) return <ErrorMessage message={`Failed to load markets: ${error}`} />;
 
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "#e6edf3" }}>
-          All Markets
-        </h1>
-        <p style={{ margin: "6px 0 0", color: "#8b949e", fontSize: 14 }}>
-          Browse {data.length} active prediction markets
-        </p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "#e6edf3" }}>
+            Live Markets
+          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+            <span
+              style={{
+                display: "inline-block",
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                backgroundColor: "#00d395",
+                boxShadow: "0 0 6px #00d395",
+              }}
+            />
+            <p style={{ margin: 0, color: "#8b949e", fontSize: 14 }}>
+              {data.length} active prediction markets · updated {formatLastUpdated()}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => fetchMarkets(true)}
+          disabled={refreshing}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 16px",
+            backgroundColor: refreshing ? "#21262d" : "#1a2332",
+            border: "1px solid #21262d",
+            borderRadius: 8,
+            cursor: refreshing ? "not-allowed" : "pointer",
+            color: refreshing ? "#8b949e" : "#00d395",
+            fontSize: 13,
+            fontWeight: 600,
+            transition: "all 0.15s",
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes flash { 0%,100% { background: transparent; } 50% { background: rgba(0,211,149,0.12); } }`}</style>
 
       <div
         style={{
@@ -100,14 +212,11 @@ export function MarketsPage() {
           padding: 24,
         }}
       >
+        {/* Filters */}
         <div style={{ marginBottom: 20 }}>
-          <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: "#e6edf3" }}>
-            Active Markets
-          </h2>
-
-          {/* Coin filter + Timeframe filter */}
-          <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+            {/* Coin tabs */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {COINS.map((coin) => (
                 <button
                   key={coin}
@@ -129,7 +238,8 @@ export function MarketsPage() {
               ))}
             </div>
 
-            <div style={{ display: "flex", gap: 6 }}>
+            {/* Timeframe tabs */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {TIMEFRAMES.map((tf) => (
                 <button
                   key={tf}
@@ -150,6 +260,10 @@ export function MarketsPage() {
                 </button>
               ))}
             </div>
+
+            <span style={{ color: "#8b949e", fontSize: 12, marginLeft: "auto" }}>
+              {filtered.length} markets shown
+            </span>
           </div>
         </div>
 
@@ -185,32 +299,70 @@ export function MarketsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((market, i) => (
-              <tr
-                key={`${market.id}-${i}`}
-                style={{ borderBottom: "1px solid #21262d" }}
-              >
-                <td style={{ padding: "14px 12px 14px 0", minWidth: 220 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <CoinBadge coin={market.coin} size="sm" />
-                    <div>
-                      <div style={{ color: "#e6edf3", fontSize: 13, fontWeight: 500 }}>
-                        {truncate(market.question, 55)}
-                      </div>
-                      <div style={{ color: "#8b949e", fontSize: 11, marginTop: 2 }}>
-                        {market.market_type} · Up
+            {filtered.map((market, i) => {
+              const changed = changedIds.has(market.id);
+              const prevPrice = prevPrices[market.id];
+              const priceDir =
+                changed && prevPrice !== undefined
+                  ? market.market_price > prevPrice
+                    ? "up"
+                    : "down"
+                  : null;
+
+              return (
+                <tr
+                  key={`${market.id}-${i}`}
+                  style={{
+                    borderBottom: "1px solid #21262d",
+                    animation: changed ? "flash 2s ease" : "none",
+                    transition: "background 0.3s",
+                  }}
+                >
+                  <td style={{ padding: "14px 12px 14px 0", minWidth: 240 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <CoinBadge coin={market.coin} size="sm" />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: "#e6edf3", fontSize: 13, fontWeight: 500 }}>
+                          {truncate(market.question, 52)}
+                        </div>
+                        <div style={{ color: "#8b949e", fontSize: 11, marginTop: 2 }}>
+                          {market.market_type}
+                          {market.endDate && (
+                            <span style={{ marginLeft: 6 }}>
+                              · ends {new Date(market.endDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#e6edf3" }}>
-                  {formatProbability(market.market_price)}
-                </td>
-                <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: market.our_estimate > market.market_price ? "#00d395" : "#f85149" }}>
-                  {formatProbability(market.our_estimate)}
-                </td>
-                <td style={{ padding: "14px 12px", textAlign: "right" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                  </td>
+
+                  <td style={{ padding: "14px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <span style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 14,
+                      color: priceDir === "up" ? "#00d395" : priceDir === "down" ? "#f85149" : "#e6edf3",
+                      fontWeight: priceDir ? 700 : 400,
+                      transition: "color 0.3s",
+                    }}>
+                      {formatProbability(market.market_price)}
+                    </span>
+                    {priceDir && (
+                      <span style={{
+                        marginLeft: 4,
+                        fontSize: 11,
+                        color: priceDir === "up" ? "#00d395" : "#f85149",
+                      }}>
+                        {priceDir === "up" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </td>
+
+                  <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: market.our_estimate > market.market_price ? "#00d395" : "#f85149" }}>
+                    {formatProbability(market.our_estimate)}
+                  </td>
+
+                  <td style={{ padding: "14px 12px", textAlign: "right" }}>
                     <span style={{
                       fontFamily: "JetBrains Mono, monospace",
                       fontSize: 13,
@@ -219,21 +371,23 @@ export function MarketsPage() {
                     }}>
                       {market.edge >= 0 ? "↗" : "↘"} {formatEdge(market.edge)}
                     </span>
-                  </div>
-                </td>
-                <td style={{ padding: "14px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <EdgeBar edge={market.edge} maxEdge={maxEdge} width={60} />
-                    <span style={{ color: "#8b949e", fontSize: 12 }}>
-                      {Math.round(market.confidence * 100)}%
-                    </span>
-                  </div>
-                </td>
-                <td style={{ padding: "14px 0", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8b949e" }}>
-                  {formatDollar(market.volume)}
-                </td>
-              </tr>
-            ))}
+                  </td>
+
+                  <td style={{ padding: "14px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <EdgeBar edge={market.edge} maxEdge={maxEdge} width={60} />
+                      <span style={{ color: "#8b949e", fontSize: 12 }}>
+                        {Math.round(market.confidence * 100)}%
+                      </span>
+                    </div>
+                  </td>
+
+                  <td style={{ padding: "14px 0", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8b949e" }}>
+                    {formatDollar(market.volume)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
@@ -242,6 +396,23 @@ export function MarketsPage() {
             No markets match the selected filters.
           </div>
         )}
+
+        {/* Footer: next refresh countdown */}
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-block",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              backgroundColor: "#00d395",
+              boxShadow: "0 0 5px #00d395",
+            }}
+          />
+          <span style={{ color: "#8b949e", fontSize: 12 }}>
+            Auto-refreshes every 30 seconds · next refresh in {Math.max(0, 30 - (secondsAgo % 30))}s
+          </span>
+        </div>
       </div>
     </div>
   );

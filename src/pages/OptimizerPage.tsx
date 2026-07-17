@@ -10,7 +10,6 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 
 const RISK_LABELS: Record<number, string> = {
@@ -43,15 +42,68 @@ const COL_STYLE: React.CSSProperties = {
   textAlign: "left" as const,
 };
 
+// Custom pie tooltip that shows both % and dollar amount
+function PieTooltip({
+  active,
+  payload,
+  totalAmount,
+}: {
+  active?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any[];
+  totalAmount: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const { name, value } = payload[0];
+  const dollars = (value / 100) * totalAmount;
+  return (
+    <div
+      style={{
+        backgroundColor: "#1a2332",
+        border: "1px solid #21262d",
+        borderRadius: 8,
+        padding: "10px 14px",
+        color: "#e6edf3",
+        fontSize: 13,
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>{name}</div>
+      <div style={{ color: "#00d395", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 15 }}>
+        {formatDollar(dollars)}
+      </div>
+      <div style={{ color: "#8b949e", fontSize: 12, marginTop: 2 }}>{value}% of portfolio</div>
+    </div>
+  );
+}
+
 export function OptimizerPage() {
-  const [riskLevel, setRiskLevel] = useState(5);
+  // Single source of truth: `amount` is always the current dollar value
   const [amount, setAmount] = useState(500);
-  const [customAmount, setCustomAmount] = useState("");
+  const [inputText, setInputText] = useState("500");
+  const [activePreset, setActivePreset] = useState<number | null>(500);
+  const [riskLevel, setRiskLevel] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { portfolioResult, setPortfolioResult } = useAppContext();
 
-  const effectiveAmount = customAmount ? parseFloat(customAmount) || 0 : amount;
+  const handleAmountInput = (val: string) => {
+    setInputText(val);
+    const parsed = parseFloat(val);
+    if (!isNaN(parsed) && parsed > 0) {
+      setAmount(parsed);
+      // Clear preset highlight if user typed a non-preset value
+      const matchingPreset = AMOUNT_PRESETS.find((p) => p.value === parsed);
+      setActivePreset(matchingPreset ? parsed : null);
+    } else {
+      setActivePreset(null);
+    }
+  };
+
+  const handlePresetClick = (value: number) => {
+    setAmount(value);
+    setInputText(String(value));
+    setActivePreset(value);
+  };
 
   const handleOptimize = async () => {
     setLoading(true);
@@ -59,7 +111,7 @@ export function OptimizerPage() {
     try {
       const result = await api.optimize({
         risk_level: riskLevel,
-        amount: effectiveAmount,
+        amount,
       });
       setPortfolioResult(result);
     } catch (e) {
@@ -70,8 +122,11 @@ export function OptimizerPage() {
   };
 
   const allocations = portfolioResult
-    ? Object.entries(portfolioResult.allocations)
+    ? Object.entries(portfolioResult.allocations).sort(([, a], [, b]) => b.weight - a.weight)
     : [];
+
+  // Use the amount that was actually sent to the API (stored in portfolioResult.amount)
+  const resultAmount = portfolioResult?.amount ?? amount;
 
   const pieData = allocations
     .filter(([, a]) => a.weight > 0)
@@ -81,8 +136,9 @@ export function OptimizerPage() {
       color: getCoinColor(coin),
     }));
 
-  const totalAllocated = allocations.reduce((sum, [, a]) => sum + a.weight, 0);
-  const cashRemaining = (1 - totalAllocated) * effectiveAmount;
+  const totalWeight = allocations.reduce((sum, [, a]) => sum + a.weight, 0);
+  const totalDollarAllocated = allocations.reduce((sum, [, a]) => sum + a.dollar_amount, 0);
+  const cashRemaining = resultAmount - totalDollarAllocated;
 
   return (
     <div>
@@ -196,10 +252,9 @@ export function OptimizerPage() {
             <span style={{ color: "#8b949e", fontSize: 18, fontWeight: 600 }}>$</span>
             <input
               type="number"
-              value={customAmount || effectiveAmount}
-              onChange={(e) => {
-                setCustomAmount(e.target.value);
-              }}
+              value={inputText}
+              onChange={(e) => handleAmountInput(e.target.value)}
+              min={1}
               style={{
                 background: "none",
                 border: "none",
@@ -215,14 +270,11 @@ export function OptimizerPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {AMOUNT_PRESETS.map(({ value, label, sub }) => {
-              const isActive = !customAmount && amount === value;
+              const isActive = activePreset === value;
               return (
                 <button
                   key={value}
-                  onClick={() => {
-                    setAmount(value);
-                    setCustomAmount("");
-                  }}
+                  onClick={() => handlePresetClick(value)}
                   style={{
                     background: isActive ? "rgba(0,211,149,0.08)" : "#0d1117",
                     border: isActive ? "1px solid #00d395" : "1px solid #21262d",
@@ -295,102 +347,175 @@ export function OptimizerPage() {
 
       {/* Results */}
       {portfolioResult && !loading && (
-        <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 20 }}>
-          {/* Pie chart */}
+        <>
+          {/* Summary banner */}
           <div
             style={{
-              backgroundColor: "#161b22",
-              border: "1px solid #21262d",
+              backgroundColor: "rgba(0,211,149,0.06)",
+              border: "1px solid rgba(0,211,149,0.25)",
               borderRadius: 12,
-              padding: 24,
+              padding: "16px 24px",
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 16,
             }}
           >
-            <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600, color: "#e6edf3" }}>
-              Allocation
-            </h2>
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1a2332",
-                    border: "1px solid #21262d",
-                    borderRadius: 8,
-                    color: "#e6edf3",
-                  }}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  formatter={(value: any) => [`${value}%`, "Allocation"]}
-                />
-                <Legend
-                  formatter={(value) => (
-                    <span style={{ color: "#8b949e", fontSize: 12 }}>{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-
-            {cashRemaining > 0 && (
-              <div
-                style={{
-                  backgroundColor: "#0d1117",
-                  border: "1px solid #21262d",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  marginTop: 8,
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span style={{ color: "#8b949e", fontSize: 13 }}>Cash (unallocated)</span>
-                <span style={{ color: "#e6edf3", fontFamily: "JetBrains Mono, monospace", fontSize: 13 }}>
-                  {formatDollar(cashRemaining)}
-                </span>
+            <div>
+              <div style={{ color: "#8b949e", fontSize: 12, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
+                Allocation Summary
               </div>
-            )}
+              <div style={{ color: "#e6edf3", fontSize: 20, fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
+                {formatDollar(resultAmount)} total investment
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 32 }}>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "#8b949e", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>Deployed</div>
+                <div style={{ color: "#00d395", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 16 }}>
+                  {formatDollar(totalDollarAllocated)}
+                </div>
+                <div style={{ color: "#8b949e", fontSize: 11 }}>{formatPercent(totalWeight)} of budget</div>
+              </div>
+              {cashRemaining > 0.01 && (
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ color: "#8b949e", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>Cash</div>
+                  <div style={{ color: "#e6edf3", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 16 }}>
+                    {formatDollar(cashRemaining)}
+                  </div>
+                  <div style={{ color: "#8b949e", fontSize: 11 }}>unallocated</div>
+                </div>
+              )}
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "#8b949e", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>Markets</div>
+                <div style={{ color: "#e6edf3", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 16 }}>
+                  {allocations.length}
+                </div>
+                <div style={{ color: "#8b949e", fontSize: 11 }}>positions</div>
+              </div>
+            </div>
           </div>
 
-          {/* Allocation table */}
-          <div
-            style={{
-              backgroundColor: "#161b22",
-              border: "1px solid #21262d",
-              borderRadius: 12,
-              padding: 24,
-              overflowX: "auto",
-            }}
-          >
-            <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600, color: "#e6edf3" }}>
-              Portfolio Breakdown
-            </h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ ...COL_STYLE }}>Coin</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Weight</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Amount</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Market</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Model Est.</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Edge</th>
-                  <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Confidence</th>
-                  <th style={{ ...COL_STYLE }}>Market Question</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allocations
-                  .sort(([, a], [, b]) => b.weight - a.weight)
-                  .map(([coin, alloc]) => (
+          <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 20 }}>
+            {/* Pie chart */}
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 12,
+                padding: 24,
+              }}
+            >
+              <h2 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "#e6edf3" }}>
+                Allocation
+              </h2>
+              <p style={{ margin: "0 0 16px", color: "#8b949e", fontSize: 12 }}>
+                Hover a slice for exact dollar amount
+              </p>
+              {/* Compact inline legend — all coins on one row */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", marginBottom: 8 }}>
+                {pieData.map((entry) => (
+                  <div key={entry.name} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: entry.color, flexShrink: 0 }} />
+                    <span style={{ color: "#8b949e", fontSize: 11 }}>{entry.name}</span>
+                  </div>
+                ))}
+              </div>
+
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={58}
+                    outerRadius={95}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={index} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip content={(props: any) => <PieTooltip {...props} totalAmount={resultAmount} />} />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* Per-coin dollar breakdown under pie */}
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                {allocations.filter(([, a]) => a.weight > 0).map(([coin, alloc]) => (
+                  <div key={coin} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: getCoinColor(coin), flexShrink: 0 }} />
+                      <span style={{ color: "#8b949e", fontSize: 11 }}>{coin}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <span style={{ color: "#8b949e", fontSize: 11, fontFamily: "JetBrains Mono, monospace" }}>
+                        {formatPercent(alloc.weight)}
+                      </span>
+                      <span style={{ color: "#00d395", fontSize: 12, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", minWidth: 55, textAlign: "right" }}>
+                        {formatDollar(alloc.dollar_amount)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {cashRemaining > 0.01 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #21262d", paddingTop: 6, marginTop: 2 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#21262d", border: "1px solid #30363d" }} />
+                      <span style={{ color: "#8b949e", fontSize: 12 }}>Cash</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <span style={{ color: "#8b949e", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>
+                        {formatPercent(cashRemaining / resultAmount)}
+                      </span>
+                      <span style={{ color: "#8b949e", fontSize: 13, fontFamily: "JetBrains Mono, monospace", minWidth: 60, textAlign: "right" }}>
+                        {formatDollar(cashRemaining)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Allocation table */}
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 12,
+                padding: 24,
+                overflowX: "auto",
+              }}
+            >
+              <div style={{ marginBottom: 16 }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "#e6edf3" }}>
+                  Portfolio Breakdown
+                </h2>
+                <p style={{ margin: 0, color: "#8b949e", fontSize: 12 }}>
+                  Based on {formatDollar(resultAmount)} investment · Kelly-Markowitz optimal sizing
+                </p>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...COL_STYLE }}>Coin</th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Weight</th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const, color: "#00d395" }}>
+                      Invest ($)
+                    </th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Market Price</th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Model Est.</th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Edge</th>
+                    <th style={{ ...COL_STYLE, textAlign: "right" as const }}>Confidence</th>
+                    <th style={{ ...COL_STYLE }}>Market Question</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map(([coin, alloc]) => (
                     <tr key={coin} style={{ borderTop: "1px solid #21262d" }}>
                       <td style={{ padding: "14px 12px 14px 0" }}>
                         <CoinBadge coin={coin} size="sm" />
@@ -398,8 +523,23 @@ export function OptimizerPage() {
                       <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: "#e6edf3" }}>
                         {formatPercent(alloc.weight)}
                       </td>
-                      <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#00d395" }}>
-                        {formatDollar(alloc.dollar_amount)}
+                      {/* Dollar amount — the key column, highlighted */}
+                      <td style={{ padding: "14px 12px", textAlign: "right" }}>
+                        <div
+                          style={{
+                            display: "inline-block",
+                            backgroundColor: "rgba(0,211,149,0.1)",
+                            border: "1px solid rgba(0,211,149,0.25)",
+                            borderRadius: 6,
+                            padding: "3px 8px",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "#00d395",
+                          }}
+                        >
+                          {formatDollar(alloc.dollar_amount)}
+                        </div>
                       </td>
                       <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#e6edf3" }}>
                         {formatProbability(alloc.market_price)}
@@ -430,10 +570,114 @@ export function OptimizerPage() {
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
+                </tbody>
+                {/* Totals row */}
+                <tfoot>
+                  <tr style={{ borderTop: "2px solid #30363d" }}>
+                    <td style={{ padding: "12px 12px 4px 0", color: "#8b949e", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Total
+                    </td>
+                    <td style={{ padding: "12px 12px 4px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: "#e6edf3" }}>
+                      {formatPercent(totalWeight)}
+                    </td>
+                    <td style={{ padding: "12px 12px 4px", textAlign: "right" }}>
+                      <div
+                        style={{
+                          display: "inline-block",
+                          backgroundColor: "rgba(0,211,149,0.15)",
+                          border: "1px solid rgba(0,211,149,0.4)",
+                          borderRadius: 6,
+                          padding: "3px 8px",
+                          fontFamily: "JetBrains Mono, monospace",
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "#00d395",
+                        }}
+                      >
+                        {formatDollar(totalDollarAllocated)}
+                      </div>
+                    </td>
+                    <td colSpan={5} style={{ padding: "12px 0 4px", color: "#8b949e", fontSize: 12 }}>
+                      {cashRemaining > 0.01 && `+ ${formatDollar(cashRemaining)} cash remaining`}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Reasoning report */}
+          {portfolioResult.report && (
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 12,
+                padding: 24,
+                marginTop: 20,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    backgroundColor: "rgba(0,211,149,0.12)",
+                    border: "1px solid rgba(0,211,149,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 14,
+                    flexShrink: 0,
+                  }}
+                >
+                  ✦
+                </div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#e6edf3" }}>
+                  Why This Allocation?
+                </h2>
+              </div>
+              <div
+                style={{
+                  color: "#8b949e",
+                  fontSize: 13,
+                  lineHeight: 1.8,
+                  fontFamily: "Inter, sans-serif",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {portfolioResult.report.split("\n").map((line, i) => {
+                  if (line.startsWith("•")) {
+                    return (
+                      <div key={i} style={{ marginBottom: 6 }}>
+                        <span style={{ color: "#00d395" }}>•</span>
+                        <span>{line.slice(1)}</span>
+                      </div>
+                    );
+                  }
+                  if (line === "") return <div key={i} style={{ marginBottom: 6 }} />;
+                  // First non-empty line is the risk level summary — highlight it
+                  if (i === 0) {
+                    return (
+                      <div key={i} style={{ color: "#e6edf3", fontWeight: 600, marginBottom: 6 }}>
+                        {line}
+                      </div>
+                    );
+                  }
+                  if (line === "Allocation breakdown:") {
+                    return (
+                      <div key={i} style={{ color: "#e6edf3", fontWeight: 600, marginBottom: 4, marginTop: 4 }}>
+                        {line}
+                      </div>
+                    );
+                  }
+                  return <div key={i} style={{ marginBottom: 4 }}>{line}</div>;
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* How it works */}

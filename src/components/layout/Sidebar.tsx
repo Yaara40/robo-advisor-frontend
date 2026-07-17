@@ -1,4 +1,7 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import kymarketLogo from "../../assets/kymarket-logo.png";
 
 const NAV_ITEMS = [
   {
@@ -46,6 +49,13 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar() {
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.dashboard().then((d) => setLiveCount(d.active_markets)).catch(() => {});
+  }, []);
+
   return (
     <aside
       style={{
@@ -64,39 +74,26 @@ export function Sidebar() {
       {/* Logo */}
       <div
         style={{
-          padding: "24px 20px 20px",
+          padding: "20px 20px 16px",
           borderBottom: "1px solid #21262d",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: "#00d395",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d1117" strokeWidth="2.5">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-              <polyline points="17 6 23 6 23 12" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ color: "#e6edf3", fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>
-              Robo-Advisor
-            </div>
-            <div style={{ color: "#8b949e", fontSize: 11 }}>POLYMARKET AI</div>
-          </div>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 0, cursor: "pointer" }}
+          onClick={() => navigate("/")}
+        >
+          <img
+            src={kymarketLogo}
+            alt="Kymarket"
+            style={{ height: 44, width: "auto", objectFit: "contain" }}
+          />
         </div>
 
         {/* Markets live indicator */}
-        <div
+        <button
+          onClick={() => navigate("/markets")}
           style={{
-            marginTop: 16,
+            marginTop: 14,
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -104,6 +101,9 @@ export function Sidebar() {
             borderRadius: 8,
             padding: "6px 10px",
             border: "1px solid #21262d",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
           }}
         >
           <span
@@ -114,23 +114,23 @@ export function Sidebar() {
               backgroundColor: "#00d395",
               display: "inline-block",
               boxShadow: "0 0 6px #00d395",
-              animation: "pulse 2s infinite",
             }}
           />
-          <span style={{ color: "#8b949e", fontSize: 12 }}>Markets Live</span>
+          <span style={{ color: "#8b949e", fontSize: 12, flex: 1 }}>Markets Live</span>
           <span
             style={{
-              marginLeft: "auto",
               backgroundColor: "#21262d",
-              color: "#8b949e",
+              color: liveCount ? "#00d395" : "#8b949e",
               fontSize: 11,
               borderRadius: 4,
               padding: "1px 6px",
+              fontFamily: "JetBrains Mono, monospace",
+              fontWeight: 600,
             }}
           >
-            30
+            {liveCount ?? "…"}
           </span>
-        </div>
+        </button>
       </div>
 
       {/* Nav */}
