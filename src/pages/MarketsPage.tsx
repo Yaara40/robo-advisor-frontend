@@ -3,21 +3,34 @@ import { api } from "../api/client";
 import type { MarketPrediction } from "../types";
 import { CoinBadge } from "../components/shared/CoinBadge";
 import { EdgeBar } from "../components/shared/EdgeBar";
-import { LoadingSpinner, ErrorMessage } from "../components/shared/LoadingSpinner";
-import { formatProbability, formatEdge, formatDollar, truncate } from "../utils/format";
+import {
+  LoadingSpinner,
+  ErrorMessage,
+} from "../components/shared/LoadingSpinner";
+import {
+  formatProbability,
+  formatEdge,
+  formatDollar,
+  truncate,
+} from "../utils/format";
 
-type SortKey = "edge" | "our_estimate" | "market_price" | "confidence" | "volume";
+type SortKey =
+  | "edge"
+  | "our_estimate"
+  | "market_price"
+  | "confidence"
+  | "volume";
 type SortDir = "asc" | "desc";
 
 const COINS = ["All", "BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "HYPE"];
-const TIMEFRAMES = ["All", "5 Min", "15 Min", "1 Hour", "4 Hour", "Daily", "Weekly"];
-const TIMEFRAME_MAP: Record<string, string> = {
-  "5 Min": "5min",
-  "15 Min": "15min",
-  "1 Hour": "1hour",
-  "4 Hour": "4hour",
-  Daily: "1day",
-  Weekly: "weekly",
+const TIMEFRAMES = ["All", "1 Hour", "4 Hour", "Daily", "Weekly", "Monthly"];
+const TIMEFRAME_MAP: Record<string, string[]> = {
+  "1 Hour": ["1hour"],
+  "4 Hour": ["4hour"],
+  Daily: ["1day"],
+  // "weekly", "monthly", and "all" are longer-horizon markets; group them here
+  Weekly: ["weekly", "all"],
+  Monthly: ["monthly"],
 };
 
 const POLL_INTERVAL = 30_000; // 30 seconds
@@ -72,7 +85,9 @@ export function MarketsPage() {
 
       // Store new prices for next comparison
       const newPrices: Record<string, number> = {};
-      incoming.forEach((m) => { newPrices[m.id] = m.market_price; });
+      incoming.forEach((m) => {
+        newPrices[m.id] = m.market_price;
+      });
       prevPricesRef.current = newPrices;
       setPrevPrices(newPrices);
 
@@ -124,7 +139,11 @@ export function MarketsPage() {
 
   const filtered = data
     .filter((m) => selectedCoin === "All" || m.coin === selectedCoin)
-    .filter((m) => selectedTimeframe === "All" || m.market_type === TIMEFRAME_MAP[selectedTimeframe])
+    .filter(
+      (m) =>
+        selectedTimeframe === "All" ||
+        (TIMEFRAME_MAP[selectedTimeframe] ?? []).includes(m.market_type),
+    )
     .sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       return (a[sortKey] - b[sortKey]) * mul;
@@ -139,18 +158,43 @@ export function MarketsPage() {
     return `${Math.floor(secondsAgo / 60)}m ago`;
   };
 
-  if (loading) return <LoadingSpinner message="Fetching live markets from Polymarket..." />;
-  if (error && data.length === 0) return <ErrorMessage message={`Failed to load markets: ${error}`} />;
+  if (loading)
+    return (
+      <LoadingSpinner message="Fetching live markets from Polymarket..." />
+    );
+  if (error && data.length === 0)
+    return <ErrorMessage message={`Failed to load markets: ${error}`} />;
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 24,
+        }}
+      >
         <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "#e6edf3" }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 28,
+              fontWeight: 700,
+              color: "#e6edf3",
+            }}
+          >
             Live Markets
           </h1>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginTop: 6,
+            }}
+          >
             <span
               style={{
                 display: "inline-block",
@@ -162,7 +206,8 @@ export function MarketsPage() {
               }}
             />
             <p style={{ margin: 0, color: "#8b949e", fontSize: 14 }}>
-              {data.length} active prediction markets · updated {formatLastUpdated()}
+              {data.length} active prediction markets · updated{" "}
+              {formatLastUpdated()}
             </p>
           </div>
         </div>
@@ -192,7 +237,9 @@ export function MarketsPage() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
-            style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}
+            style={{
+              animation: refreshing ? "spin 0.8s linear infinite" : "none",
+            }}
           >
             <polyline points="23 4 23 10 17 10" />
             <polyline points="1 20 1 14 7 14" />
@@ -214,7 +261,14 @@ export function MarketsPage() {
       >
         {/* Filters */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 24,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             {/* Coin tabs */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {COINS.map((coin) => (
@@ -228,7 +282,8 @@ export function MarketsPage() {
                     cursor: "pointer",
                     fontSize: 13,
                     fontWeight: 600,
-                    backgroundColor: selectedCoin === coin ? "#00d395" : "#21262d",
+                    backgroundColor:
+                      selectedCoin === coin ? "#00d395" : "#21262d",
                     color: selectedCoin === coin ? "#0d1117" : "#8b949e",
                     transition: "all 0.15s",
                   }}
@@ -251,7 +306,8 @@ export function MarketsPage() {
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: 600,
-                    backgroundColor: selectedTimeframe === tf ? "#00d395" : "#21262d",
+                    backgroundColor:
+                      selectedTimeframe === tf ? "#00d395" : "#21262d",
                     color: selectedTimeframe === tf ? "#0d1117" : "#8b949e",
                     transition: "all 0.15s",
                   }}
@@ -261,7 +317,9 @@ export function MarketsPage() {
               ))}
             </div>
 
-            <span style={{ color: "#8b949e", fontSize: 12, marginLeft: "auto" }}>
+            <span
+              style={{ color: "#8b949e", fontSize: 12, marginLeft: "auto" }}
+            >
               {filtered.length} markets shown
             </span>
           </div>
@@ -319,17 +377,39 @@ export function MarketsPage() {
                   }}
                 >
                   <td style={{ padding: "14px 12px 14px 0", minWidth: 240 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    >
                       <CoinBadge coin={market.coin} size="sm" />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: "#e6edf3", fontSize: 13, fontWeight: 500 }}>
+                        <div
+                          style={{
+                            color: "#e6edf3",
+                            fontSize: 13,
+                            fontWeight: 500,
+                          }}
+                        >
                           {truncate(market.question, 52)}
                         </div>
-                        <div style={{ color: "#8b949e", fontSize: 11, marginTop: 2 }}>
+                        <div
+                          style={{
+                            color: "#8b949e",
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
                           {market.market_type}
                           {market.endDate && (
                             <span style={{ marginLeft: 6 }}>
-                              · ends {new Date(market.endDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                              · ends{" "}
+                              {new Date(market.endDate).toLocaleTimeString(
+                                "en-US",
+                                {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                },
+                              )}
                             </span>
                           )}
                         </div>
@@ -337,52 +417,94 @@ export function MarketsPage() {
                     </div>
                   </td>
 
-                  <td style={{ padding: "14px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
-                    <span style={{
-                      fontFamily: "JetBrains Mono, monospace",
-                      fontSize: 14,
-                      color: priceDir === "up" ? "#00d395" : priceDir === "down" ? "#f85149" : "#e6edf3",
-                      fontWeight: priceDir ? 700 : 400,
-                      transition: "color 0.3s",
-                    }}>
+                  <td
+                    style={{
+                      padding: "14px 12px",
+                      textAlign: "right",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 14,
+                        color:
+                          priceDir === "up"
+                            ? "#00d395"
+                            : priceDir === "down"
+                              ? "#f85149"
+                              : "#e6edf3",
+                        fontWeight: priceDir ? 700 : 400,
+                        transition: "color 0.3s",
+                      }}
+                    >
                       {formatProbability(market.market_price)}
                     </span>
                     {priceDir && (
-                      <span style={{
-                        marginLeft: 4,
-                        fontSize: 11,
-                        color: priceDir === "up" ? "#00d395" : "#f85149",
-                      }}>
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          fontSize: 11,
+                          color: priceDir === "up" ? "#00d395" : "#f85149",
+                        }}
+                      >
                         {priceDir === "up" ? "▲" : "▼"}
                       </span>
                     )}
                   </td>
 
-                  <td style={{ padding: "14px 12px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: market.our_estimate > market.market_price ? "#00d395" : "#f85149" }}>
+                  <td
+                    style={{
+                      padding: "14px 12px",
+                      textAlign: "right",
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 14,
+                      color:
+                        market.our_estimate > market.market_price
+                          ? "#00d395"
+                          : "#f85149",
+                    }}
+                  >
                     {formatProbability(market.our_estimate)}
                   </td>
 
                   <td style={{ padding: "14px 12px", textAlign: "right" }}>
-                    <span style={{
-                      fontFamily: "JetBrains Mono, monospace",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: market.edge >= 0 ? "#00d395" : "#f85149",
-                    }}>
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: market.edge >= 0 ? "#00d395" : "#f85149",
+                      }}
+                    >
                       {market.edge >= 0 ? "↗" : "↘"} {formatEdge(market.edge)}
                     </span>
                   </td>
 
                   <td style={{ padding: "14px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <EdgeBar edge={market.edge} maxEdge={maxEdge} width={60} />
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <EdgeBar
+                        edge={market.edge}
+                        maxEdge={maxEdge}
+                        width={60}
+                      />
                       <span style={{ color: "#8b949e", fontSize: 12 }}>
                         {Math.round(market.confidence * 100)}%
                       </span>
                     </div>
                   </td>
 
-                  <td style={{ padding: "14px 0", textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8b949e" }}>
+                  <td
+                    style={{
+                      padding: "14px 0",
+                      textAlign: "right",
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 13,
+                      color: "#8b949e",
+                    }}
+                  >
                     {formatDollar(market.volume)}
                   </td>
                 </tr>
@@ -392,13 +514,29 @@ export function MarketsPage() {
         </table>
 
         {filtered.length === 0 && (
-          <div style={{ textAlign: "center", color: "#8b949e", padding: "40px 0", fontSize: 14 }}>
+          <div
+            style={{
+              textAlign: "center",
+              color: "#8b949e",
+              padding: "40px 0",
+              fontSize: 14,
+            }}
+          >
             No markets match the selected filters.
           </div>
         )}
 
         {/* Footer: next refresh countdown */}
-        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #21262d", display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px solid #21262d",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <span
             style={{
               display: "inline-block",
@@ -410,7 +548,8 @@ export function MarketsPage() {
             }}
           />
           <span style={{ color: "#8b949e", fontSize: 12 }}>
-            Auto-refreshes every 30 seconds · next refresh in {Math.max(0, 30 - (secondsAgo % 30))}s
+            Auto-refreshes every 30 seconds · next refresh in{" "}
+            {Math.max(0, 30 - (secondsAgo % 30))}s
           </span>
         </div>
       </div>

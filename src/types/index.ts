@@ -46,7 +46,26 @@ export interface CoinAllocation {
   our_estimate: number;
   market_price: number;
   confidence: number;
+  market_type: MarketType;
   market: CoinMarket;
+}
+
+export interface ModelComparisonCoin {
+  coin: string;
+  our_estimate: number;
+  lr_estimate: number;
+  market_price: number;
+  our_edge: number;
+  lr_edge: number;
+}
+
+export interface ModelComparison {
+  our_mean_edge_pct: number;
+  lr_mean_edge_pct: number;
+  edge_advantage_pct: number;
+  prediction_correlation: number;
+  n_markets: number;
+  per_coin: ModelComparisonCoin[];
 }
 
 export interface OptimizeResponse {
@@ -55,6 +74,7 @@ export interface OptimizeResponse {
   amount: number;
   allocations: Record<string, CoinAllocation>;
   report?: string;
+  model_comparison?: ModelComparison | null;
 }
 
 export interface DashboardResponse {
