@@ -3,7 +3,8 @@ import type {
   OptimizeResponse,
   DashboardResponse,
   MarketsResponse,
-  HistoryResponse,
+  BacktestResponse,
+  OOSResponse,
 } from "../types";
 
 const BASE = "/api";
@@ -28,5 +29,10 @@ export const api = {
     }),
   markets: () => request<MarketsResponse>("/markets"),
   dashboard: () => request<DashboardResponse>("/dashboard"),
-  history: () => request<HistoryResponse>("/history"),
+  history: () => request<BacktestResponse>("/history"),
+  runBacktest: () =>
+    request<{ status: string; n_trades: number }>("/backtest/run", {
+      method: "POST",
+    }),
+  oosHistory: () => request<OOSResponse>("/history/oos"),
 };

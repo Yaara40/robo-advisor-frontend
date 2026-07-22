@@ -366,15 +366,15 @@ function ModelPerformancePanel({
           >
             {[
               {
-                label: "Our mean edge",
-                value: `${comparison.our_mean_edge_pct.toFixed(2)}%`,
-                sub: "avg |estimate − market|",
+                label: "Our edge",
+                value: `+${comparison.our_mean_edge_pct.toFixed(2)}%`,
+                sub: "avg signed edge on selected markets",
                 color: "#00d395",
               },
               {
-                label: "Logistic Reg edge",
-                value: `${comparison.lr_mean_edge_pct.toFixed(2)}%`,
-                sub: "avg |estimate − market|",
+                label: "LR edge (same markets)",
+                value: `${comparison.lr_mean_edge_pct >= 0 ? "+" : ""}${comparison.lr_mean_edge_pct.toFixed(2)}%`,
+                sub: "LR sees less alpha on our picks",
                 color: "#8b949e",
               },
               {
@@ -776,10 +776,10 @@ export function OptimizerPage() {
 
   const pieData = allocations
     .filter(([, a]) => a.weight > 0)
-    .map(([coin, a]) => ({
-      name: coin,
+    .map(([, a]) => ({
+      name: a.coin,
       value: Math.round(a.weight * 100),
-      color: getCoinColor(coin),
+      color: getCoinColor(a.coin),
     }));
 
   const totalWeight = allocations.reduce((sum, [, a]) => sum + a.weight, 0);
@@ -1152,9 +1152,9 @@ export function OptimizerPage() {
               >
                 {allocations
                   .filter(([, a]) => a.weight > 0)
-                  .map(([coin, alloc]) => (
+                  .map(([key, alloc]) => (
                     <div
-                      key={coin}
+                      key={key}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -1173,12 +1173,12 @@ export function OptimizerPage() {
                             width: 7,
                             height: 7,
                             borderRadius: "50%",
-                            backgroundColor: getCoinColor(coin),
+                            backgroundColor: getCoinColor(alloc.coin),
                             flexShrink: 0,
                           }}
                         />
                         <span style={{ color: "#8b949e", fontSize: 11 }}>
-                          {coin}
+                          {alloc.coin}
                         </span>
                       </div>
                       <div
@@ -1329,10 +1329,10 @@ export function OptimizerPage() {
                 <tbody>
                   {allocations
                     .filter(([, a]) => a.dollar_amount > 0)
-                    .map(([coin, alloc]) => (
-                      <tr key={coin} style={{ borderTop: "1px solid #21262d" }}>
+                    .map(([key, alloc]) => (
+                      <tr key={key} style={{ borderTop: "1px solid #21262d" }}>
                         <td style={{ padding: "14px 12px 14px 0" }}>
-                          <CoinBadge coin={coin} size="sm" />
+                          <CoinBadge coin={alloc.coin} size="sm" />
                         </td>
                         <td
                           style={{
@@ -1435,7 +1435,6 @@ export function OptimizerPage() {
                               "4hour": "4 Hour",
                               "1day": "Daily",
                               weekly: "Weekly",
-                              monthly: "Monthly",
                               all: "All",
                             };
                             const label =

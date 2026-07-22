@@ -285,6 +285,122 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── How It Works ──────────────────────────────────────────────── */}
+      <div style={{ marginTop: 32 }}>
+        <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700, color: "#e6edf3" }}>
+          How It Works
+        </h2>
+
+        {/* Three-column method overview */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
+          {[
+            {
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00d395" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4l3 3" />
+                </svg>
+              ),
+              title: "1. Market Scanning",
+              body: "Every 5 minutes we pull all active Polymarket binary markets for 7 coins (BTC, ETH, SOL, XRP, BNB, DOGE, HYPE) across four timeframes: 1-hour, 4-hour, daily, and weekly windows.",
+            },
+            {
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              ),
+              title: "2. ML Probability Estimate",
+              body: "An ensemble of gradient-boosted classifiers — one trained per timeframe — outputs P(YES) for each market. Features include CLOB price trajectory, momentum, volatility, and volume. Trained on ~13,000 closed markets.",
+            },
+            {
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f3ba2f" strokeWidth="2">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <path d="M2 10h20" />
+                </svg>
+              ),
+              title: "3. Kelly-Markowitz Sizing",
+              body: "Edges are translated into optimal bet sizes via fractional Kelly, then a Markowitz correlation penalty prevents over-concentration in correlated coins. Risk level 1–10 controls both the Kelly fraction and the penalty strength.",
+            },
+          ].map((card) => (
+            <div
+              key={card.title}
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 12,
+                padding: 20,
+              }}
+            >
+              <div style={{ marginBottom: 12 }}>{card.icon}</div>
+              <div style={{ fontWeight: 700, color: "#e6edf3", marginBottom: 8, fontSize: 14 }}>{card.title}</div>
+              <div style={{ color: "#8b949e", fontSize: 13, lineHeight: 1.6 }}>{card.body}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Model advantage */}
+        <div
+          style={{
+            backgroundColor: "#161b22",
+            border: "1px solid #21262d",
+            borderRadius: 12,
+            padding: 24,
+          }}
+        >
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#e6edf3" }}>
+            Why Our Model Outperforms Baselines
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <div style={{ color: "#8b949e", fontSize: 12, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 12 }}>
+                Ensemble (our model)
+              </div>
+              {[
+                ["56.1% direction accuracy", "Correctly picks YES/NO majority of the time"],
+                ["+11.9% in-sample ROI", "Flat $20 bet across 1,342 trades"],
+                ["+25.2% OOS ROI", "Tested on 2,290 unseen June 2026 markets"],
+                ["Sharpe 1.91", "Strong risk-adjusted return"],
+                ["Per-timeframe models", "Separate GBM for 1h, 4h, 1day, weekly — each tuned to its window's dynamics"],
+              ].map(([metric, desc]) => (
+                <div key={metric} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+                  <span style={{ color: "#00d395", fontSize: 14, marginTop: 1, flexShrink: 0 }}>✓</span>
+                  <div>
+                    <span style={{ color: "#e6edf3", fontSize: 13, fontWeight: 600 }}>{metric}</span>
+                    <span style={{ color: "#8b949e", fontSize: 12 }}> — {desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ color: "#8b949e", fontSize: 12, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 12 }}>
+                Baselines (flat bet, same data)
+              </div>
+              {[
+                ["LR: −14.6% ROI, 42.5% accuracy", "Logistic regression on the same features — underfits the non-linear price dynamics"],
+                ["RF: −26.1% ROI, 36.7% accuracy", "Random forest — overfits in-sample but fails out-of-sample on evolving market regimes"],
+                ["Always-YES: −44.8% ROI", "Naive bet — markets price in YES fairly, so blindly betting YES loses to the vig"],
+              ].map(([metric, desc]) => (
+                <div key={metric} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+                  <span style={{ color: "#f85149", fontSize: 14, marginTop: 1, flexShrink: 0 }}>✗</span>
+                  <div>
+                    <span style={{ color: "#e6edf3", fontSize: 13, fontWeight: 600 }}>{metric}</span>
+                    <span style={{ color: "#8b949e", fontSize: 12 }}> — {desc}</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{ marginTop: 8, padding: "10px 14px", backgroundColor: "rgba(0,211,149,0.06)", borderRadius: 8, border: "1px solid rgba(0,211,149,0.15)" }}>
+                <span style={{ color: "#8b949e", fontSize: 12, lineHeight: 1.6 }}>
+                  All comparisons use identical markets, identical features, and a flat $20 bet per trade —
+                  the gap reflects pure model quality, not bet sizing.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

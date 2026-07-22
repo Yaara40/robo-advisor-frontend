@@ -23,14 +23,12 @@ type SortKey =
 type SortDir = "asc" | "desc";
 
 const COINS = ["All", "BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "HYPE"];
-const TIMEFRAMES = ["All", "1 Hour", "4 Hour", "Daily", "Weekly", "Monthly"];
+const TIMEFRAMES = ["All", "1 Hour", "4 Hour", "Daily", "Weekly"];
 const TIMEFRAME_MAP: Record<string, string[]> = {
   "1 Hour": ["1hour"],
   "4 Hour": ["4hour"],
   Daily: ["1day"],
-  // "weekly", "monthly", and "all" are longer-horizon markets; group them here
   Weekly: ["weekly", "all"],
-  Monthly: ["monthly"],
 };
 
 const POLL_INTERVAL = 30_000; // 30 seconds
